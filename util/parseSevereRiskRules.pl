@@ -1,0 +1,563 @@
+#!/usr/bin/perl
+
+
+use strict;
+use warnings;
+
+use Getopt::Long qw(GetOptions);
+
+# Author: Jose Quijada
+# Create Date: 20170803
+# Description: The SQL in severe risk rules is broken across several lines when
+#   exported from DB via SQL query. This script makes the SQL-holding field
+#   a single line. The rest of the fields are fine and therefore do not 
+#   require any additonal handling
+#
+#
+#   Algorithm:
+#     - Identify the beginning of a line. This can be done via regex
+#       /^\d+\^/
+#     - Split the line by "^" (charet)
+#     - Append to the last field all the lines seen until the next line
+#       is encountered.
+#
+#   Once that's done, need to fin the various combinations of
+#     - Input elements from IE record
+#     - Combinations of elements from severe risk table which are checked 
+#       against combo above,
+#     using exact match
+#     These need to be classified according to market and info source
+#
+#     
+
+
+my $FLD_DELIM = qr/^/;
+my $svr_risk_data_file;
+my $svr_risk_rules_file;
+my $attr_combos_str;
+my $match_option;
+
+GetOptions('svr-risk-data-file=s' => \$svr_risk_data_file,
+  'svr-risk-rules-file=s' => \$svr_risk_rules_file,
+  'attr-combos=s' => \$attr_combos_str, 
+  'match-option=s' => \$match_option)
+  or die "Usage: $0 --'svr-risk-data-file <path> --svr-risk-rules-file <path> --attr-combos 'nameOne0,nameTwo4|nameA5,nameB7|...\n";
+
+
+my @attr_combos = split('\|', $attr_combos_str);
+print STDERR 
+  "DEBUG: Lists will be created for these attribute combos: @attr_combos\n";
+
+# 
+# Load svere risk raw data. First row is assumed to be the headers, which
+# will be used as keys to a map where the value is the 0-based position
+# of that field within each row. This is needed later when building the entries
+# and lists
+#
+open(SVR_RISK_DATA, "$svr_risk_data_file") 
+  || die "Could not open $svr_risk_data_file: $!";
+
+#
+# Global variables
+#
+my $TAB_TAG_OPEN =  qq/{"<TABLE_NAME>": [\n/;
+my $TAB_TAG_CLOSE = qq/]}\n/;
+my $EMPTY = '__EMPTY__';
+
+my %ENTRY_UNIVERSE;
+# Below is needed when building mapper, to get ID of entry
+# that list maps to. Remember it's one list-to-many entries relationship
+my %LIST_TO_ENTRY_ID;
+my %LIST;
+my %ENT_TO_ID;
+my $ENT_ID = 0;
+my $LIST_ID = 0;
+my %LIST_TO_ID;
+my %SVR_RISK_FLD_POS;
+my @SVR_RISK_ROW_REFS;
+my %ENTRY_BY_FLD_COMBO;
+my $cnt = 0;
+while(<SVR_RISK_DATA>) {
+    s/[\n\r]+$//;
+    my $cur_line = $_;
+    $cur_line =~ s/"//g;
+
+    my @flds = split(',', $cur_line);
+
+    # Build map of header to position. This is a one time affair. First
+    # row of the input data is assumed to be the headers.
+    if ($cnt == 0) {
+        my $pos = 0;
+        for my $h (@flds) {
+            $h =~ s/"//g;
+            $SVR_RISK_FLD_POS{$h} = $pos;
+            ++$pos;
+        }
+        ++$cnt;
+        next;
+    }
+
+    # Save reference to row and store in array of references. This will be used
+    # when building the entry lists.
+    push(@SVR_RISK_ROW_REFS, \@flds);
+    ++$cnt;
+}
+close(SVR_RISK_DATA);
+
+# 6^"BRAZIL"^0^1^"SEVERE_RISK_WITH_BUSINESS_AND_MAILING_ADDRESS"
+
+open(SVR_RISK_RULES, "$svr_risk_rules_file")
+  || die "Could not open $svr_risk_rules_file: $!";
+
+
+my $sql;
+my @records;
+my $totalProcessed = 0;
+while (<SVR_RISK_RULES>) {
+    s/[\n\r]+$//;
+    my $cur_line = $_;
+    $cur_line =~ s/"//g;
+
+
+    #print STDERR "Cur line is $cur_line";
+    
+    if (lineIsNewRecord($cur_line)) {
+
+        #
+        # For now do US only
+        #
+        if ($cur_line !~ /UNITED STATES/) {
+            next;
+        }
+
+        ++$totalProcessed;
+        if ($totalProcessed % 1000 == 0) {
+            print STDERR "DEBUG: Have processed $totalProcessed records\n";
+        }
+        #print STDERR "[RECORD] $cur_line\n";
+        # Reached a new record. Before doing anything else,
+        # append to the *previous* record seen the SQL query lines collected
+        # thus far. 
+        if (@records > 0) {
+            # Check if this is the first record of
+            # the input file, in which case having a previously
+            # collected SQL query does not make sense
+            # Otherwise complete the SQL query of the record
+            # just built 
+            my $last_rec = $records[$#records-1];
+            $last_rec .= $sql;
+            my @last_rec_flds = split('\^', $last_rec);
+            my $last_rec_sql = $last_rec_flds[$#last_rec_flds]; 
+
+            
+            # These will be the fields out of which unique
+            # universe entries will be built
+            my @svr_risk_fld_combos = 
+              @{moduleToFields($last_rec_flds[4])};
+
+
+            # Build lists for the attribute combinations requested, and map
+            # them to entries built from combination of fields stipulated
+            # by this rule set.
+            for my $ac (@attr_combos) {
+                my $list_name = createListName($ac, \@last_rec_flds);
+
+                # Associate the list with the entries. The entries for this
+                # record are generated by iterating over every row of input
+                # severe risk data, for every combination of fields for this
+                # rule that was detected by method extractFieldCombosFromSql()
+                # Entries get re-used, meaning that a new one is not created
+                # if a previous record already caused the creation of one.
+                # These associations get used later to build the mapper JSON.
+                for my $fc (@svr_risk_fld_combos) {
+                    associateEntriesWithList($list_name, $fc);
+                }
+
+            }
+        }
+
+        # Split the record into fields. The last one is the SQL query field
+        my @flds = split('\^', $cur_line);
+        push(@records, $cur_line);
+
+        # The last field holds the begining of the SQL query. Capture
+        # that here
+        $sql = $flds[$#flds];    
+    } else {
+        #print STDERR " [SQL]\n";
+        # These are SQL query lines, collect them to append to last
+        # record seen.
+        $cur_line =~ s/\^//g;
+        $sql .= $cur_line; 
+    } 
+}
+close(SVR_RISK_RULES);
+
+
+# Release the memory of below, no longer needed beyond this point
+undef(%ENTRY_BY_FLD_COMBO);
+undef(@SVR_RISK_ROW_REFS);
+
+
+
+#
+# Finally print everything out
+#
+# Print out the lists
+my $list_table_name = "severe_risk_list_table";
+my $entry_table_name = "severe_risk_entry_table";
+my $mapper_table_name = "severe_risk_entry_list_mapper_table";
+
+open(LISTS, ">./list_sr.txt") || die "Could not open lists file for output: $!";
+my $list_table_tag_open = $TAB_TAG_OPEN;
+$list_table_tag_open =~ s/<TABLE_NAME>/$list_table_name/;
+print LISTS $list_table_tag_open;
+for my $list_name (sort keys %LIST_TO_ID) {
+    print LISTS qq/{"id":"$LIST_TO_ID{$list_name}","list_name":"$list_name"},\n/;
+}
+print LISTS $TAB_TAG_CLOSE;
+close(LISTS);
+
+
+
+# Print out the list-to-entry mappings 
+#
+# First need to create a list of list ID's and the entry ID they
+# map to.
+my $ent_size = keys %ENT_TO_ID; 
+print STDERR "DEBUG: Creating mappings of entry to list ID's, entries is $ent_size...\n"; 
+my %ent_to_list_id;
+for my $list_name (keys %LIST_TO_ENTRY_ID) {
+    my $ent_hash_ref = $LIST_TO_ENTRY_ID{$list_name};
+    my $size = keys %{$ent_hash_ref};
+    #print STDERR "Handling list $list_name with $size entries\n";
+    for my $eid (keys %$ent_hash_ref) {
+        my @list_ids = ();
+        if (exists $ent_to_list_id{$eid}) {
+            @list_ids = @{$ent_to_list_id{$eid}};
+        }
+        push(@list_ids, $LIST_TO_ID{$list_name});
+        $ent_to_list_id{$eid} = \@list_ids;
+        #print STDERR "entry $eid bound to @list_ids\n";
+    }
+    print STDERR "Handled list $list_name\n";
+}
+
+
+print STDERR "DEBUG: Creating mapping file...\n";
+open(MAPPINGS, ">./mapper_sr.txt") || die "Could not open mappings file for output: $!";
+my $mapper_table_tag_open = $TAB_TAG_OPEN;
+$mapper_table_tag_open =~ s/<TABLE_NAME>/$mapper_table_name/;
+print MAPPINGS $mapper_table_tag_open;
+for my $eid (sort keys %ent_to_list_id) {
+    my $list_ids_str = join(',', @{$ent_to_list_id{$eid}});
+    $list_ids_str = '[' . $list_ids_str .']';
+    print MAPPINGS qq/{"$list_table_name":$list_ids_str,"$entry_table_name":"$eid"},\n/; 
+}
+print MAPPINGS $TAB_TAG_CLOSE;
+close(MAPPINGS);
+
+
+# Print out the entries
+print STDERR "DEBUG: Creating entries file...\n";
+open(ENTS, ">./entry_sr.txt") || die "Could not open entry file for output: $!";
+my $ents_table_tag_open = $TAB_TAG_OPEN;
+$ents_table_tag_open =~ s/<TABLE_NAME>/$entry_table_name/;
+print ENTS $ents_table_tag_open;
+for my $ent (sort {$ENT_TO_ID{$a} cmp $ENT_TO_ID{$b}} keys %ENT_TO_ID) {
+    my $id = $ENT_TO_ID{$ent};
+    my $ent_row = qq/{"id":"$id","entry":"$ent"},/;
+    print ENTS "$ent_row\n";
+}
+print ENTS $TAB_TAG_CLOSE;
+close(ENTS);
+print STDERR "Done\n";
+
+
+
+
+
+
+#
+# Sub-routines
+#
+sub extractFieldCombosFromSql {
+    my $sql = $_[0];
+
+    #print STDERR "JMQ: Received SQL $sql\n";
+    my @parts = split('AND', $sql);
+    my @ret_fld_combos;
+    # In RegEx world, the "?:" means a non-capturing group (see
+    # https://www.regular-expressions.info/brackets.html, search for 
+    # "Non-Capturing Groups")
+    my $whereAndRegEx = qr/(?:WHERE|AND)/;
+    my $whereAndOptRegEx = qr/(?:WHERE|AND){0,1}/;
+    my @flds;
+    for my $p (@parts) {
+        my $left;
+        my $right;
+        if ($p =~ /=/) {
+            # A single field
+            ($left, $right) = split('=', $p);
+            if ($left =~ /\([^:]/) {
+                push(@flds, ($left =~ /$whereAndRegEx.+\(([^\)']+)[\),]/));
+            } else {
+                if ($left =~ /WHERE|AND/) {
+                    push(@flds, ($left =~ /$whereAndRegEx{1}\s+([^\s]+)/)); 
+                } else {
+                    push(@flds, ($left =~ /\s+([^\s]+)\s+$/));
+                }
+            }
+        } elsif ($p =~ /IN/) {
+            # Multiple fields
+            ($left, $right) = split('IN', $p);
+            push(@flds, ($left =~ /$whereAndRegEx?.+?\(([^,(]+),/g));
+        } else {
+            print STDERR "JMQ: ERROR: sql given was $sql\n"; 
+            die "Not sure how to process SQL fragment: $p\n";
+        }
+    }
+
+    my $flds_found_str = join(',', @flds);
+
+    #
+    # Health check on the regex' above. Ensure they returned something.
+    #
+    if (!$flds_found_str || $flds_found_str !~ /[a-zA-Z]/) {
+        print "\n";
+        #print STDERR "JMQ: ERROR: Part is $p\n";
+        print STDERR "JMQ: ERROR: \$flds_found_str for this part is/are: $flds_found_str\n";
+        #print STDERR "JMQ: ERROR: left is $left, right is $right\n";
+        print STDERR "JMQ: ERROR: sql given was $sql\n";
+        die "Abort, check the errors above.\n";
+    }
+
+    push(@ret_fld_combos, uc($flds_found_str));
+    print STDERR "JMQ: Fields found in SQL is @ret_fld_combos\nSQL given was $sql";
+    
+    return \@ret_fld_combos
+}
+
+
+
+
+sub lineIsNewRecord {
+    my $line = $_[0];
+
+    if ($line =~ /^\d+\^/) {
+        return 1;
+    }
+
+    # In Perl 'undef' is treated as false
+    return undef;
+}
+
+
+
+sub createListName {
+    my ($attrs_str, $rec_ref) = @_;
+
+    my @attrs = split(',', $attrs_str);
+    my $list_name = '';
+    for my $a (@attrs) {
+        my ($idx) = ($a =~ /(\d+)$/);
+        my $val = $rec_ref->[$idx];
+        $a =~ s/\d+$//; 
+        $list_name = $list_name . $a . $val . '-';
+    }
+
+    # Get rid of the extra dash ('-') added
+    chop($list_name);
+    $list_name =~ s/\s/_/g;
+    return $list_name;
+}
+
+
+
+sub associateEntriesWithList {
+    my ($list_name, $fld_combo) = @_;
+
+    # If this field combo already seen, get from cache, it will
+    # speed things up a great deal, rather than having to iterate
+    # over all rows of severe risk data, which is time consuming, only
+    # to find that the entry already exist in ENT_TO_ID hash/map.
+    # (See buildEntryAndAddToUniverseIfAbsent())
+    my %ents_to_add;
+    if (exists $ENTRY_BY_FLD_COMBO{$fld_combo}) {
+        my $hash_ref = $ENTRY_BY_FLD_COMBO{$fld_combo};
+        for my $k (keys %$hash_ref) {
+            ++$ents_to_add{$hash_ref->{$k}};
+        } 
+    } else {
+        for my $ary_ref (@SVR_RISK_ROW_REFS) {
+            my $ent_id = buildEntryAndAddToUniverseIfAbsent($fld_combo, $ary_ref);
+            if ($ent_id) {
+                ++$ents_to_add{$ent_id};
+            }
+        }
+    }
+
+
+    #
+    # Now associate the entry ID's with the list, ensuring
+    # scenario of seeing list for first time is appropriately 
+    # handled.
+    #
+    # Add to list name the field combinations. We do this to easily identify 
+    # from list name the field combo it applies to
+    $list_name .= '-';
+    if ($match_option) {
+        $list_name .= $match_option;
+        $list_name .= '-';
+    }
+    $list_name .= $fld_combo;
+    $list_name =~ s/,/-/g; 
+    if (exists $LIST_TO_ENTRY_ID{$list_name}) {
+        for my $eid (keys %ents_to_add) {
+            ++$LIST_TO_ENTRY_ID{$list_name}->{$eid};
+        }
+    } else {
+        $LIST_TO_ENTRY_ID{$list_name} = \%ents_to_add;
+    }
+
+    # Don't forget to add to list map if list name seen for first time
+    if (not exists $LIST_TO_ID{$list_name}) {
+        $LIST_TO_ID{$list_name} = $LIST_ID;
+        $LIST{$LIST_ID} = $LIST_ID;
+        ++$LIST_ID;
+        print STDERR "DEBUG: Created list $list_name, ID is $LIST_ID\n";
+    }
+
+}
+
+
+
+sub buildEntryAndAddToUniverseIfAbsent {
+    my $fld_combo = $_[0];
+    my $rec_ref = $_[1];
+
+    my @flds = split(',', $fld_combo);    
+    my $ent = '';
+    for my $f (@flds) {
+        my $fld_idx = translateFieldToIdx($f);
+
+        # Validate field name was found in field idx map. We need this
+        # before I can retrieve the value from the input data
+        if (stringIsBlank($fld_idx)) {
+            print STDERR 
+              "JMQ: Failed to retrieve field position, field is $f,"
+              . " \@flds is @flds\n";;
+            die "Abort, check the errors above.\n";
+        }
+
+        my $fld_val = undef;
+        if (stringIsBlank($$rec_ref[$fld_idx])) {
+            #$fld_val = $EMPTY;
+            # All fields must be present in order to form a combination
+            return undef;
+        } else {
+            $fld_val = $$rec_ref[$fld_idx];
+        }
+        $ent = $ent . ' ' . $fld_val;
+
+        # Defensively check if we were given a bad field name. For now
+        # definition of bad is a field that contains a non-alpha character,
+        # or one that fails to contain any letters (at least one letter
+        # required).
+        if ($fld_val eq $EMPTY && ($f =~ /[^\w]/ || $f !~ /[a-zA-Z]/)) {
+            print STDERR "JMQ: \$rec_ref is " . join(',', @$rec_ref) . "\n";
+            print STDERR "JMQ: \$f is $f, \$fld_idx is $fld_idx\n";
+            die "Abort, check the errors above\.n";
+        }
+
+        #if (!$rec_ref->[$fld_idx]) {
+        #    print STDERR "\n";
+        #    print STDERR "JMQ: WARNING: \$rec_ref is " . join(',', @$rec_ref) . "\n";
+        #    print STDERR "JMQ: WARNING: \$f is $f, \$fld_idx is $fld_idx\n";
+        #}
+    }
+
+    #print STDERR "JMQ: \$ent is $ent\n";
+    
+    if (stringIsBlank($ent)) {
+        return undef;
+    }
+
+    my $ret_ent_id;
+    $ent = trim($ent);
+    if (exists $ENT_TO_ID{$ent}) {
+        # had already created this entry...
+        $ret_ent_id = $ENT_TO_ID{$ent};
+        #print STDERR 
+        #  "DEBUG: Had already created entry $ent, ID = $ret_ent_id\n";
+    } else {
+        # ...else seeing this entry for the first time.
+        $ENT_TO_ID{$ent} = $ENT_ID;
+        $ENTRY_UNIVERSE{$ENT_ID} = $ent;
+        #print STDERR "DEBUG: Added entry $ent\n";
+        $ret_ent_id = $ENT_ID;
+        ++$ENT_ID;
+    }
+
+    my $hash_ref = {};
+    if (exists $ENTRY_BY_FLD_COMBO{$fld_combo}) {
+        $hash_ref = $ENTRY_BY_FLD_COMBO{$fld_combo};
+    } else {
+        $ENTRY_BY_FLD_COMBO{$fld_combo} = $hash_ref;
+    }
+
+    $hash_ref->{$ent} = $ret_ent_id;
+
+    return $ret_ent_id;
+}
+
+
+
+sub stringIsBlank {
+    my $val = $_[0];
+
+    if (not defined $val) {
+        return 1;
+    }
+    $val =~ s/^\s+//;
+    $val =~ s/\s+$//;
+
+    return ($val =~ /^$/ || $val eq 'null');
+}
+
+
+sub trim {
+    my $val = $_[0];
+
+    $val =~ s/^\s+//;
+    $val =~ s/\s+$//;
+
+    return $val;
+}
+
+
+sub translateFieldToIdx {
+    my $fld_name = $_[0];
+    return $SVR_RISK_FLD_POS{$fld_name};
+}
+
+
+
+sub moduleToFields {
+    my $mod_name = $_[0];
+    my %hash = (
+      'SEVERE_RISK_WITH_STATE_TRADE_NAME_AND_PHYSICAL_ADDRESS' => ['TRDG_NME_1,ADR_LN_TXT,PRIM_ADR_TOWN_NME,PRIM_ADR_TERR_ABRV,PRIM_ADR_POST_CODE'], 
+      'SEVERE_RISK_WITH_STATE_TRADE_NAME_AND_MAILING_ADDRESS' => ['TRDG_NME_1,MLG_ADR_LN_TXT,MLG_ADR_POST_TOWN_NME,MLG_ADR_TERR_ABRV,MLG_ADR_POST_CODE'],
+      'SEVERE_RISK_WITH_BUSINESS_AND_PHYSICAL_ADDRESS' => ['BUS_NME,ADR_LN_TXT,PRIM_ADR_TOWN_NME,PRIM_ADR_TERR_ABRV,PRIM_ADR_POST_CODE'],
+      'SEVERE_RISK_WITH_BUSINESS_AND_PHONE' => ['BUS_NME,PRIM_ADR_TOWN_NME,PRIM_ADR_TERR_ABRV,PRIM_ADR_POST_CODE,PHONE_NBR', 'BUS_NME,MLG_ADR_POST_TOWN_NME,MLG_ADR_TERR_ABRV,MLG_ADR_POST_CODE,PHONE_NBR'],
+      'SEVERE_RISK_WITH_MAILING_ADDRESS_AND_PHONE' => ['PHONE_NBR,MLG_ADR_LN_TXT,MLG_ADR_POST_TOWN_NME,MLG_ADR_TERR_ABRV,MLG_ADR_POST_CODE'],
+      'SEVERE_RISK_WITH_BUSINESS_AND_MAILING_ADDRESS' => ['BUS_NME,MLG_ADR_LN_TXT,MLG_ADR_POST_TOWN_NME,MLG_ADR_TERR_ABRV,MLG_ADR_POST_CODE'],
+      'SEVERE_RISK_WITH_TRADESTYLE_NAME_AND_PHONE' => ['TRDG_NME_1,PRIM_ADR_TOWN_NME,PRIM_ADR_TERR_ABRV,PRIM_ADR_POST_CODE,PHONE_NBR', 'TRDG_NME_1,MLG_ADR_POST_TOWN_NME,MLG_ADR_TERR_ABRV,MLG_ADR_POST_CODE,PHONE_NBR'],
+      'SEVERE_RISK_WITH_STATE_AND_CEO_NAME' => ['SNR_PRIN_NME,PRIM_ADR_TERR_ABRV', 'SNR_PRIN_NME,MLG_ADR_TERR_ABRV'],
+      'SEVERE_RISK_WITH_PHYSICAL_ADDRESS_AND_PHONE' => ['PHONE_NBR,ADR_LN_TXT,PRIM_ADR_TOWN_NME,PRIM_ADR_TERR_ABRV,PRIM_ADR_POST_CODE']
+      );
+
+      return $hash{$mod_name};
+
+#"SEVERE_RSK_ID","BUS_NME","TRDG_NME_1","TRDG_NME_2","TRDG_NME_3","TRDG_NME_4","TRDG_NME_5","ADR_LN_TXT","PRIM_ADR_TOWN_NME","PRIM_ADR_TERR_ABRV","PRIM_ADR_POST_CODE","MLG_ADR_LN_TXT","MLG_ADR_POST_TOWN_NME","MLG_ADR_TERR_ABRV","MLG_ADR_POST_CODE","SNR_PRIN_NME","PHONE_NBR","ROW_CRET_DT","LST_UPD_DT","UPD_USR_ID","GEO_REF_ID"
+}
