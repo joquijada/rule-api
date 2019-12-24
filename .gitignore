@@ -5,12 +5,12 @@ target
 .project
 #*.iml
 .idea
-.travis.yml
 .npmignore
 .gradle
 build/
 *.log
 *.log.*
+codesigning.asc
 
 ### IntelliJ IDEA ###
 .idea
