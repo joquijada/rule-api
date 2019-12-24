@@ -113,7 +113,7 @@
           <target>8</target>
         </configuration>
       </plugin>
-      <plugin>
+      <!--<plugin>
         <groupId>com.exsoinn</groupId>
         <artifactId>code-quality-maven-plugin</artifactId>
         <extensions>true</extensions>
@@ -121,7 +121,7 @@
           <scmUrl>scm:git:https://github.com/joquijada/rule-api.git</scmUrl>
           <packageNames>com.exsoinn.*</packageNames>
         </configuration>
-      </plugin>
+      </plugin>-->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-gpg-plugin</artifactId>
@@ -200,4 +200,56 @@
 
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>coverage</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>0.8.4</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>prepare-package</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <!-- Build using command `mvn clean install -P dev`. The `dev` profile
+           disables the gpg signing dependency, so that it's nto a requirement to have gpg.exe installed
+       -->
+      <id>dev</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>none</phase>
+                <goals>
+                  <goal/>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
