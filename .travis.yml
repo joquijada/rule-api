@@ -16,7 +16,7 @@ stages:
 - deploy
 addons:
   sonarcloud:
-    organization: joquijada-github
+    organization: "joquijada-github"
 jobs:
   include:
   - stage: test
