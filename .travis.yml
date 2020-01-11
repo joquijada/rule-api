@@ -17,6 +17,8 @@ stages:
 addons:
   sonarcloud:
     organization: "joquijada-github"
+    token:
+      secure: "p8x0nz0vl6vTARgmoc+5ZRa2sTo+xJteoCzKgMhc1A/aH+zzxi/bfjIz2rw0/eVe6Plegv/abg4eZGQCijs1Me/nncIDSr8so/Szn90bWM5+pXPETIqxYmdkPQLB3vhuyKQyMPPhI0Dg2H2qzvD8Rf0oyn1Y7xyi9c7oJ+vif0ROqFVImqc+2++4CNhGHJBSG7misOBI2hRw5MVojYYKt3FZBsQiSFnjukXccQxBpXY5ZG/4GpZIM0w13poDXM2mBVbrDW4EaS59jNZRSr+YXpjLYq8i4Ki87AMUSuVYjE8sTVoZTtTJoGUhOauqfD/27UGhKLNT/Op5HZm/YG/0y5TZo+BODP2M+DP2IzXFk3k8YD07QmjO81grBNJmYXzPQjBf6EGzj2ZNFshUUPwzaO61RhuilPpp7g2oEk6toWnhAAy93jG6onCTa3U7jWYWm6bI+ER+6Ei0QLL8PAvMGG+fFZibmuDrjbYH7lQxSQw5OvhZY8OVrCwiv9jQ9wzWr42P/UB5n61cRfcLuUJH3Gc3s/fAQoC5NFe+7518QjnIoNzXZFhYJrzjgZaGom6wCSyziT0sYKwIebbTSnHdQlf0MvoYmo9fQqnnN7CqBGLZ3KRK3Y4uNMPJPaBjWt6guKAMERrVOr9yI9Jozx6UNx7YTUxhQvgvlqXbFagL+tQ="
 jobs:
   include:
   - stage: test
