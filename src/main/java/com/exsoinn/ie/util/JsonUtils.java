@@ -23,9 +23,9 @@ public class JsonUtils {
     }
 
     /**
-     *
-     * @param pXml
-     * @return
+     * Converts an XML string to JSON
+     * @param pXml XML as string
+     * @return JSON as string
      */
     public static String convertXmlToJson(String pXml) {
         JSONObject json = convertXmlToJsonObject(pXml);
@@ -63,7 +63,8 @@ public class JsonUtils {
      * @param pTargetElems - This argument contains a {@link java.util.Set} of element names that should be included
      *                       in the results. It gets applied only to found elements of type JsonObject both inside and
      *                       outside an array in the last node of the search path.
-     * @return - Map of name/value pairs found as per the {@param pElemPath}, where name is the element name found,
+     * @param pExtraParams - Map of extra params
+     * @return - Map of name/value pairs found as per the pElemPath, where name is the element name found,
      *           and value is the value of such element. The
      *           values returned will all be in string format; this applies to non-primitive types as well like
      *           {@link com.google.gson.JsonObject}.
@@ -91,13 +92,13 @@ public class JsonUtils {
      * Same as {@link #findElement(JsonElement, List, Map, Set, Map, Map)}, except that this method expects the JSON to search
      * to be an object of type {@link com.google.gson.JsonElement}, and caller can optionally pass a {@param pFoundElemVals}
      * to collect the search results.
-     * @param pJson
-     * @param pElemSearchPath
-     * @param pElemFilter
-     * @param pTargetElems
-     * @param pFoundElemVals
-     * @return
-     * @throws IllegalArgumentException
+     * @param pJson See {@link #findElement(JsonElement, List, Map, Set, Map, Map)}
+     * @param pElemSearchPath See {@link #findElement(JsonElement, List, Map, Set, Map, Map)}
+     * @param pElemFilter See {@link #findElement(JsonElement, List, Map, Set, Map, Map)}
+     * @param pTargetElems {@link #findElement(JsonElement, List, Map, Set, Map, Map)}
+     * @param pFoundElemVals To collect search results (a consumer arg)
+     * @return Map of results
+     * @throws IllegalArgumentException When something goes wrong
      */
     public static Map<String, String> findElement(JsonElement pJson,
                                                   List<String> pElemSearchPath,

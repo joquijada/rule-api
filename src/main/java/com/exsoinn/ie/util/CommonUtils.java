@@ -59,8 +59,8 @@ public class CommonUtils {
 
     /**
      *
-     * @param pXml
-     * @return
+     * @param pXml - XML as string
+     * @return JSON as string
      */
     public static String convertXmlToJson(String pXml) {
         return JsonUtils.convertXmlToJson(pXml);
@@ -73,9 +73,9 @@ public class CommonUtils {
     /**
      * Performs similar function to <code>Arrays.asList(T[])</code>, but this returns a modifiable
      * List instead.
-     * @param pAry
-     * @param <T>
-     * @return
+     * @param pAry Array to build list from
+     * @param <T> The type of the array
+     * @return A list of type T
      */
     public static <T> List<T> buildListFromArray(T[] pAry) {
         List<T> newList = new ArrayList<>();
@@ -90,7 +90,7 @@ public class CommonUtils {
     /**
      * Checks if the given {@code pPath} exists on disk
      * @param pPath - The path to check
-     * @return
+     * @return True if path exists on disk, false otherwise
      */
     public static boolean pathExists(String pPath) {
         File pathObj = new File(pPath);
@@ -100,7 +100,7 @@ public class CommonUtils {
     /**
      * Like {@link CommonUtils#pathExists(String)}, but in addition checks if the path is for a file
      * @param pPath - The path to check.
-     * @return
+     * @return True if path exists and is a file, false otherwise
      */
     public static boolean pathExistsAndIsFile(String pPath) {
         boolean exists = pathExists(pPath);
@@ -122,7 +122,7 @@ public class CommonUtils {
 
 
     /**
-     * Uses the passed in {@param pExecutorSvc} and {@code List} of {@link FutureTask}'s to execute.
+     * Uses the passed in pExecutorSvc and {@code List} of {@link FutureTask}'s to execute.
      * <strong>It is absolutely imperative</strong>, if necessary, that the operations that the passed in
      * {@code FutureTask}'s wrap
      * re-throw any caught exception wrapped in something suitable for runtime, such as a {@link RuntimeException}. This
@@ -135,6 +135,7 @@ public class CommonUtils {
      * @param pExecutorSvc - The {@link ExecutorService} to use to run the {@code Runnable}'s
      * @param pOperations - The {@code Runnable}'s that encapsulate the operations to perform
      * @param pTimeout - Time budgeted in seconds that should be spent waiting for all operations to finish.
+     * @param <T> - The type of stuff returned
      * @return - The underlying cause of any caught exceptions inside any of the passed in {@code Runnable}'s, if any
      *   problems occurred.
      * @throws InterruptedException - This may get thrown because the call to wait for all {@code Runnable}'s to finish
@@ -229,12 +230,12 @@ public class CommonUtils {
      * TODO: This method throws checked {@link RuleException}. Perhaps it should be part of Rule API util package,
      * TODO:   and not a common one.
      *
-     * @param pExecutorSvc
-     * @param pTasks
-     * @param <T>
-     * @return
-     * @throws InterruptedException
-     * @throws RuleException
+     * @param pExecutorSvc Executor service
+     * @param pTasks Collection of tasks to execute
+     * @param <T> Type that the result bearing Callable returns
+     * @return a {@link DnbBusinessObject} object
+     * @throws InterruptedException If an interruption occurs
+     * @throws RuleException Something wrong processing a {@link Rule}
      */
     public static <T extends DnbBusinessObject> T runTasksAsynchronouslyAndCancelOnFirstResult(
             ExecutorService pExecutorSvc,
@@ -285,8 +286,8 @@ public class CommonUtils {
      * what are you high? Isn't calling code declaring checked exceptions in its method signature?"
      * you might be wondering. The checked exception might have been wrapped inside a another exception
      * type, and this helper method is recruited to help find out the wrapped exception type.
-     * @param pThrowable
-     * @return
+     * @param pThrowable The {@link Throwable} to launder
+     * @return A {@link RuntimeException}
      */
     public static RuntimeException launderThrowable(Throwable pThrowable) {
         if (pThrowable instanceof RuntimeException) {
@@ -302,7 +303,7 @@ public class CommonUtils {
              */
             throw (Error) pThrowable;
         } else {
-            throw new IllegalStateException("Not unchecked", pThrowable);
+            throw new IllegalStateException("Not an unchecked exception (it's a checked exception)", pThrowable);
         }
     }
 
@@ -330,11 +331,14 @@ public class CommonUtils {
         return es;
     }
 
+
     /**
      * Prints info message to both log file and to standard output. The reason for printing
      * to STDOUT is so that when maven build scripts execute, a copy of the messages are conveniently displayed
      * to developer in the console, thus eliminating the need for developer to go search the log files. Makes
      * development time quicker this way.
+     * @param pMsg Message to log
+     * @param pLogger Logger instance to use
      */
     public static void infoToFileAndStdOut(String pMsg, Logger pLogger) {
         pLogger.info(pMsg);
@@ -344,6 +348,8 @@ public class CommonUtils {
 
     /**
      * Same as {@link CommonUtils#infoToFileAndStdOut(String, Logger)}, but for error messages
+     * @param pMsg Message to log
+     * @param pLogger Logger instance
      */
     public static void errorToFileAndStdErr(String pMsg, Logger pLogger) {
         pLogger.error(pMsg);

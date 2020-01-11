@@ -85,9 +85,9 @@
     -->
 
     <dependency>
-      <groupId>com.oracle.jdbc</groupId>
+      <groupId>com.oracle</groupId>
       <artifactId>ojdbc8</artifactId>
-      <version>19.3.0.0</version>
+      <version>8</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.tomcat/tomcat-jdbc -->
     <dependency>
@@ -146,8 +146,7 @@
         <artifactId>maven-javadoc-plugin</artifactId>
         <version>3.1.1</version>
         <configuration>
-          <!-- Turn off Java 8 strict Javadoc checking -->
-          <additionalparam>-Xdoclint:none</additionalparam>
+          <failOnError>false</failOnError>
           <tags>
             <tag>
               <name>notnull</name>
