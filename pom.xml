@@ -7,6 +7,7 @@
   <packaging>jar</packaging>
   <version>1.1.0</version>
   <name>rule-api</name>
+  <description>Java/JavaScript-Nashorn API to define and execute rules</description>
   <url>https://github.com/joquijada/rule-api</url>
   <licenses>
     <license>
