@@ -5,7 +5,7 @@
   <groupId>com.exsoinn.ie</groupId>
   <artifactId>rule-api</artifactId>
   <packaging>jar</packaging>
-  <version>1.4.0</version>
+  <version>1.4.1-SNAPSHOT</version>
   <name>rule-api</name>
   <description>Java/JavaScript-Nashorn API to define and execute rules</description>
   <url>https://github.com/joquijada/rule-api</url>
