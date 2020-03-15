@@ -1,8 +1,6 @@
 before_install:
 - chmod 777 cd/before-deploy.sh
 - cd/before-deploy.sh
-- mvn install:install-file -Dfile=lib/ojdbc8.jar -DgroupId=com.oracle -DartifactId=ojdbc8
-  -Dversion=8 -Dpackaging=jar
 cache:
   directories:
   - "$HOME/.m2/repository"

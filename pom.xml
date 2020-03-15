@@ -75,20 +75,13 @@
       <artifactId>jcip-annotations</artifactId>
       <version>1.0</version>
     </dependency>
-    <!--
-     *************
-    This is Oracle JDBC driver jar, located in rule-api-sample-app/lib/ojdbc8.jar.
-    You will need to install it to your local repo in order for your local maven build to work. Follow these steps:
-    1. Open a UNIX or terminal shell
-    2. cd to this modern-match-service project folder
-    3. Execute the command:
-    mvn install:install-file -Dfile=lib/ojdbc8.jar -DgroupId=com.oracle -DartifactId=ojdbc8 -Dversion=8 -Dpackaging=jar    *************
-    -->
-
+    <!-- Oracle JDBC dependency comes now from Maven central, below snippet copied/pasted from
+      https://medium.com/oracledevs/oracle-jdbc-drivers-on-maven-central-64fcf724d8b
+      -->
     <dependency>
-      <groupId>com.oracle</groupId>
-      <artifactId>ojdbc8</artifactId>
-      <version>8</version>
+      <groupId>com.oracle.ojdbc</groupId>
+      <artifactId>ojdbc10</artifactId>
+      <version>19.3.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.tomcat/tomcat-jdbc -->
     <dependency>
@@ -147,6 +140,7 @@
         <artifactId>maven-javadoc-plugin</artifactId>
         <version>3.1.1</version>
         <configuration>
+          <!-- javadoc related errors will not be showstoppers -->
           <failOnError>false</failOnError>
           <tags>
             <tag>
