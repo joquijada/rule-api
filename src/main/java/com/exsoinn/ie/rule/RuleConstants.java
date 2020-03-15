@@ -51,6 +51,8 @@ public class RuleConstants {
     public static final SimpleDateFormat DATE_FORMATTER = new SimpleDateFormat( "MM/dd/yyyy" );
     public final static String RULE_EXPRESSION = "ruleExpression";
     public static final String CURRENT_CONTEXT = "currentContext";
+    public static final String SUPPRESS_CONTEXT = "suppressContext";
+
 
 
 

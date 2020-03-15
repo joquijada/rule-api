@@ -124,7 +124,10 @@
           <execution>
             <id>sign-artifacts</id>
             <!-- We sign in the verify phase, which means it will happen before install and deploy (the last two phases)
-                 but not before earlier phases like test or package. -->
+                 but not before earlier phases like test or package.  Therefore if you don't have gpg dependency installed,
+                 simply do "mvn clean package". If you must do install, see comment in "dev" profile farther below on 
+                 how to do this.
+              -->
             <phase>verify</phase>
             <goals>
               <goal>sign</goal>
@@ -224,7 +227,7 @@
     </profile>
     <profile>
       <!-- Build using command `mvn clean install -P dev`. The `dev` profile
-           disables the gpg signing dependency, so that it's nto a requirement to have gpg.exe installed
+           disables the gpg signing dependency, so that it's not a requirement to have gpg.exe installed
        -->
       <id>dev</id>
       <build>

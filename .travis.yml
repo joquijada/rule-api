@@ -22,7 +22,7 @@ jobs:
   include:
   - stage: test
     name: Test the Code
-    script: mvn clean package -P coverage sonar:sonar
+    script: mvn -DsuppressContext=Y clean package -P coverage sonar:sonar
     if: type IN (push, pull_request)
   - stage: deploy
     name: Deploy to Maven Repo
