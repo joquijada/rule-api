@@ -206,9 +206,12 @@ public class CommonUtils {
                 }
             } finally {
                 if (interrupted) {
-                    /**
+
+                    /*
                      * Restore thread interrupted status so that thread-owning code can handle appropriately, don't just
                      * swallow it (Java Concurrency In Practice, Goetz06 7.1.3)!!!
+                     * FIXME: What the fuck am I doing here? Is this the same thread that executed the task for me
+                     *        to even care about restoring interrupted status???
                      */
                     Thread.currentThread().interrupt();
                 }
